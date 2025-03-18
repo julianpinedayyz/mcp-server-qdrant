@@ -1,0 +1,21 @@
+# Rule to automatically generate Git commit commands for each modified file
+- trigger: "create commits"
+  action:
+    script: |
+      git status --porcelain | while read -r status file; do
+        if [[ $status != 'D' ]]; then
+          # Use AI context to determine commit category
+          category=$(windsurf-ai classify-change "$file")
+          
+          # Generate a structured commit message
+          summary=$(windsurf-ai summarize-change "$file")
+          details=$(windsurf-ai describe-changes "$file")
+
+          git add "$file" && git commit -m "$category: $summary" -m "$details"
+        fi
+      done
+    description: |
+      Automates Git commit generation for each modified file upon "create commits" command.
+      - Uses Windsurf AI to classify the change category (`feat:`, `fix:`, `docs:`, `style:`, etc.).
+      - Summarizes and describes changes using AI-generated context.
+      - Ensures each file is committed individually with meaningful commit messages.
