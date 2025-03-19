@@ -1,0 +1,19 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+# Coding Pattern Preferences
+
+- Always prefer simple solutions.
+- Avoid code duplication; check for existing similar functionality before adding new code.
+- Write code considering different environments: development, testing, and production.
+- Any mayor decision like selecting a technology stack to use or technology comonent to use, needs to be consulted prior to moving forward. You DO NOT take that kind of decidion lightly and will always consult before implementing a mayor enhancement based on technology selection. Example: Selecting MongoDB over Casandra. Or selecting Vue over React.
+- Make changes only when requested or when confident they are necessary and well-understood.
+- When fixing issues, avoid introducing new patterns or technologies without first exhausting existing implementation options. If new implementations are added, ensure old ones are removed to prevent duplicate logic.
+- Maintain a clean and organized codebase. Ensure to clean any leftovers after implmenting any new code.
+- Avoid writing scripts in files, especially if they are intended for one-time use.
+- Refactor files exceeding 200–300 lines of code.
+- Use data mocking exclusively for tests; avoid mocking data in development or production environments.
+- Do not overwrite the `.env` file without prior confirmation.
