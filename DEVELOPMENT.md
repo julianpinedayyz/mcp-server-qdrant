@@ -1,115 +1,119 @@
 # Development Guide for MCP Server Qdrant
 
-## Running with Docker for Development
+## Quick Start with Docker Compose
 
-When developing, it's useful to mount your local code directory into the Docker container. This allows you to make changes locally and have them immediately available in the container without rebuilding the image.
+The easiest way to get started with development is using Docker Compose, which is already set up with hot-reloading capabilities.
 
-### Building the Development Image
-
-First, build a development version of the image:
+### Running with Docker Compose
 
 ```bash
-docker build -t mcp-server-qdrant-dev .
+# Start the MCP Server in development mode
+docker-compose up
+
+# Or to run in the background
+docker-compose up -d
 ```
 
-### Running with Volume Mount
+With this setup:
+1. Your local code is automatically mounted into the container
+2. The server automatically restarts whenever you change Python files
+3. All environment variables are pre-configured
+4. Port 8000 is mapped for the SSE transport
 
-To run the container with your local code mounted:
+### Viewing Logs
 
 ```bash
+# If running in detached mode, view logs with:
+docker-compose logs -f
+```
+
+### Stopping the Server
+
+```bash
+# Stop the server
+docker-compose down
+```
+
+## How It Works
+
+### Development Setup Components
+
+The development environment consists of three key files:
+
+1. **`Dockerfile.dev`**: A development-specific Dockerfile that includes:
+   - Python 3.12 base image
+   - Watchdog for hot-reloading
+   - An entrypoint script that handles installation and server startup
+
+2. **`docker-entrypoint-dev.sh`**: An entrypoint script that:
+   - Installs the project in development mode (`-e`) at startup
+   - Starts the server with Watchdog monitoring for file changes
+
+3. **`docker-compose.yml`**: Configuration that:
+   - Builds from Dockerfile.dev
+   - Maps port 8000
+   - Mounts your local directory to `/app`
+   - Sets all required environment variables
+
+### How Hot-Reloading Works
+
+The hot-reloading system uses Watchdog to monitor for changes to Python files. When a file changes:
+
+1. Watchdog detects the change
+2. The MCP Server process is automatically restarted
+3. Your code changes take effect immediately
+
+This eliminates the need to manually restart the container after each code change.
+
+## Manual Docker Commands (Alternative to Docker Compose)
+
+If you prefer not to use Docker Compose, you can use these commands:
+
+```bash
+# Build the development image
+docker build -t mcp-server-qdrant-dev -f Dockerfile.dev .
+
+# Run with hot-reloading
 docker run -p 8000:8000 \
-  -v /Users/julianpineda/Sandbox/MCPs/mcp-server-qdrant:/app \
+  -v $(pwd):/app \
   -e COLLECTION_NAME="code-memories" \
   -e EMBEDDING_MODEL="sentence-transformers/all-MiniLM-L6-v2" \
   mcp-server-qdrant-dev
 ```
 
-This command:
-1. Maps port 8000 from the container to your local machine
-2. Mounts your local project directory to `/app` in the container
-3. Sets the required environment variables
-4. Uses the development image you built
+## Development Best Practices
 
-### Hot Reload vs. Restart
+### Working with Dependencies
 
-#### About File Syncing
+If you add new dependencies to the project:
 
-The volume mount (`-v`) ensures that your local files are synced with the container. Any changes you make to files on your local machine will be immediately visible in the container.
+1. Add them to your `setup.py` or `pyproject.toml`
+2. The container will automatically reinstall the project when restarted
 
-#### Server Restart Requirements
+### Debugging
 
-However, **the Python process won't automatically detect changes**. You'll need to restart the container when you:
-
-- Modify Python code
-- Change configuration files
-- Update dependencies
-
-To implement hot-reload functionality, you could:
-
-1. Install development tools like `watchdog` or `nodemon` in the container
-2. Modify the Dockerfile to use these tools during development
-3. Create a development-specific entrypoint script
-
-## Development Dockerfile
-
-For a better development experience, you can create a `Dockerfile.dev` with hot-reload capabilities:
-
-```dockerfile
-FROM python:3.12-slim
-
-WORKDIR /app
-
-# Install uv for package management
-RUN pip install --no-cache-dir uv watchdog[watchmedo]
-
-# Install the project in development mode
-COPY . .
-RUN uv pip install --system -e .
-
-# Expose the default port for SSE transport
-EXPOSE 8000
-
-# Development command with hot reload
-CMD watchmedo auto-restart --directory=/app --pattern="*.py" --recursive -- python -m mcp_server_qdrant.main --transport sse
-```
-
-This development Dockerfile adds:
-- Installation of `watchdog` for file monitoring
-- Installation of the project in editable mode (`-e`)
-- A command that restarts the server when Python files change
-
-You would run this with the same volume mount as before:
+To enable debug logs:
 
 ```bash
-docker build -t mcp-server-qdrant-dev -f Dockerfile.dev .
-docker run -p 8000:8000 -v /Users/julianpineda/Sandbox/MCPs/mcp-server-qdrant:/app mcp-server-qdrant-dev
+# Modify docker-compose.yml to add:
+environment:
+  - LOG_LEVEL=debug
 ```
 
-## Alternative: Using docker-compose
+### Testing Changes
 
-For an even better development experience, you can use `docker-compose`:
-
-```yaml
-# docker-compose.yml
-version: '3'
-services:
-  mcp-server:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    ports:
-      - "8000:8000"
-    volumes:
-      - .:/app
-    environment:
-      - COLLECTION_NAME=code-memories
-      - EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
-```
-
-Then run with:
+The MCP Server runs on port 8000 with SSE transport in development mode. You can test it using any HTTP client:
 
 ```bash
-docker-compose up
+curl http://localhost:8000/health
 ```
 
-This will provide the same hot-reload functionality with a simpler command.
+## Production vs Development
+
+The main differences between the production `Dockerfile` and development `Dockerfile.dev` are:
+
+1. Development installs the package in editable mode at runtime
+2. Development includes hot-reloading with Watchdog
+3. Development mounts your local code instead of copying it
+
+This ensures you can quickly iterate on code changes during development while maintaining a clean production image.
