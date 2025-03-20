@@ -1,0 +1,75 @@
+# Docker Compose file version
+version: '3.8'
+
+# To verify networking and service communication:
+# 1. Start services:
+#    docker-compose up -d
+#
+# 2. Verify both containers are running:
+#    docker-compose ps
+#
+# 3. Check Qdrant is accessible:
+#    curl http://localhost:6333/collections
+#    # Should return a list of collections
+#
+# 4. Check MCP server can reach Qdrant (from inside MCP container):
+#    docker-compose exec mcp-server curl http://qdrant:6333/collections
+#    # Should return the same list of collections
+#
+# 5. Verify MCP server is working:
+#    curl http://localhost:8000/health
+#
+# 6. Check logs for connection issues:
+#    docker-compose logs mcp-server | grep -i "qdrant"
+#    docker-compose logs qdrant
+#
+# If services can't communicate:
+# - Check they're on the same network:
+#   docker network ls
+#   docker network inspect <network_name>
+# - Verify DNS resolution inside MCP container:
+#   docker-compose exec mcp-server ping qdrant
+
+services:
+  # Qdrant service configuration
+  # The service name 'qdrant' automatically becomes the hostname in the Docker network
+  # Other services can reach this container using 'qdrant' as the hostname
+  qdrant:
+    image: qdrant/qdrant
+    ports:
+      # Expose Qdrant's API port to the host machine
+      - "6333:6333"
+    volumes:
+      # Mount the local storage directory to persist data
+      # This maps your local directory to Qdrant's storage path
+      - /Users/julianpineda/qdrant_storage:/qdrant/storage
+    environment:
+      # Configure Qdrant to use the mounted storage path
+      - QDRANT__STORAGE__STORAGE_PATH=/qdrant/storage
+
+  # MCP Server configuration
+  mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      # Expose the MCP server's port to the host machine
+      - "8000:8000"
+    environment:
+      # Connect to Qdrant using the service name as hostname
+      # Docker Compose sets up automatic DNS resolution where 'qdrant' resolves
+      # to the Qdrant service's container IP address
+      - QDRANT_URL=http://qdrant:6333
+
+      # Configuration for the code memory collection
+      - COLLECTION_NAME=code-memory
+      - EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
+
+      # Tool descriptions for the MCP server
+      - TOOL_STORE_DESCRIPTION=Store reusable code snippets for later retrieval. The 'information' parameter should contain a natural language description of what the code does, while the actual code should be included in the 'metadata' parameter as a 'code' property. The value of 'metadata' is a Python dictionary with strings as keys. Use this whenever you generate some code snippet.
+      - TOOL_FIND_DESCRIPTION=Search for relevant code snippets based on natural language descriptions. The 'query' parameter should describe what you're looking for, and the tool will return the most relevant code snippets. Use this when you need to find existing code snippets for reuse or reference.
+
+    # Ensure Qdrant starts before the MCP server
+    # This only waits for the container to start, not for the service to be ready
+    depends_on:
+      - qdrant
