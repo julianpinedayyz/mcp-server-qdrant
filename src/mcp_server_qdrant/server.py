@@ -146,6 +146,7 @@ async def store(
     # If we set it to be optional, some of the MCP clients, like Cursor, cannot
     # handle the optional parameter correctly.
     metadata: Metadata = None,
+    collection_name: Optional[str] = None,
 ) -> str:
     """
     Store some information in Qdrant.
@@ -154,6 +155,7 @@ async def store(
         ctx: The context for the request.
         information: The information to store.
         metadata: JSON metadata to store with the information, optional.
+        collection_name: The name of the collection to use, optional. Defaults to the server's configured default collection.
 
     Returns:
         A message indicating that the information was stored.
@@ -162,18 +164,22 @@ async def store(
         StoreError: If there was an error storing the information.
         EmbeddingError: If there was an error generating embeddings.
         ConnectionError: If there was an error connecting to the Qdrant server.
+        ConfigurationError: If a collection name is not provided and no default is configured.
     """
     # Get the correlation ID from the lifespan context or generate a new one
     correlation_id = ctx.request_context.lifespan_context.get("correlation_id")
     with CorrelationIdFilter.correlation_id(correlation_id) as used_correlation_id:
+        # Add collection_name to context data if provided
         context_data = {
             "correlation_id": used_correlation_id,
             "information_length": len(information),
             "has_metadata": metadata is not None,
+            "target_collection": collection_name if collection_name else "default",
         }
 
         info(logger, "Received store request", context_data)
-        await ctx.debug(f"Storing information in Qdrant (length: {len(information)})")
+        # Update debug message
+        await ctx.debug(f"Storing information in Qdrant (length: {len(information)}, collection: {context_data['target_collection']})")
 
         try:
             qdrant_connector: QdrantConnector = ctx.request_context.lifespan_context[
@@ -188,10 +194,11 @@ async def store(
             )
 
             try:
-                await qdrant_connector.store(entry)
+                # Pass collection_name to the connector method
+                await qdrant_connector.store(entry, collection_name=collection_name)
                 info(logger, "Successfully stored information in Qdrant", context_data)
                 return f"Remembered: {information}"
-            except (StoreError, EmbeddingError, ConnectionError) as e:
+            except (ConfigurationError, StoreError, EmbeddingError, ConnectionError) as e: # Added ConfigurationError
                 # Log the error and provide a user-friendly message
                 error(logger, f"Failed to store information: {str(e)}", context_data, exc_info=e)
                 error_message = f"Failed to store information: {e.message}"
@@ -206,13 +213,19 @@ async def store(
             error(logger, error_msg, context_data, exc_info=e)
             await ctx.debug(f"Error: {str(e)}")
 
-            if not isinstance(e, (StoreError, EmbeddingError, ConnectionError)):
+            # Check if it's one of our expected custom errors before wrapping
+            if not isinstance(e, (ConfigurationError, StoreError, EmbeddingError, ConnectionError)):
                 raise StoreError(error_msg, context_data, e)
             raise
 
 
 @mcp.tool(name="qdrant-find", description=tool_settings.tool_find_description)
-async def find(ctx: Context, query: str, limit: int = 10) -> List[str]:
+async def find(
+    ctx: Context,
+    query: str,
+    limit: int = 10,
+    collection_name: Optional[str] = None,
+) -> List[str]:
     """
     Find memories in Qdrant.
 
@@ -220,6 +233,7 @@ async def find(ctx: Context, query: str, limit: int = 10) -> List[str]:
         ctx: The context for the request.
         query: The query to use for the search.
         limit: Maximum number of results to return. Default is 10.
+        collection_name: The name of the collection to search, optional. Defaults to the server's configured default collection.
 
     Returns:
         A list of entries found formatted as strings.
@@ -228,18 +242,22 @@ async def find(ctx: Context, query: str, limit: int = 10) -> List[str]:
         SearchError: If there was an error searching for entries.
         EmbeddingError: If there was an error generating embeddings.
         ConnectionError: If there was an error connecting to the Qdrant server.
+        ConfigurationError: If a collection name is not provided and no default is configured.
     """
     # Get the correlation ID from the lifespan context or generate a new one
     correlation_id = ctx.request_context.lifespan_context.get("correlation_id")
     with CorrelationIdFilter.correlation_id(correlation_id) as used_correlation_id:
+        # Add collection_name to context data
         context_data = {
             "correlation_id": used_correlation_id,
             "query": query,
             "limit": limit,
+            "target_collection": collection_name if collection_name else "default",
         }
 
         info(logger, "Received find request", context_data)
-        await ctx.debug(f"Finding results for query: {query} (limit: {limit})")
+        # Update debug message
+        await ctx.debug(f"Finding results for query: {query} (limit: {limit}, collection: {context_data['target_collection']})")
 
         try:
             qdrant_connector: QdrantConnector = ctx.request_context.lifespan_context[
@@ -247,7 +265,8 @@ async def find(ctx: Context, query: str, limit: int = 10) -> List[str]:
             ]
 
             try:
-                entries = await qdrant_connector.search(query, limit)
+                # Pass collection_name and limit to the connector method
+                entries = await qdrant_connector.search(query, collection_name=collection_name, limit=limit)
 
                 info(
                     logger,
@@ -256,12 +275,23 @@ async def find(ctx: Context, query: str, limit: int = 10) -> List[str]:
                 )
 
                 if not entries:
-                    no_results_message = f"No information found for the query '{query}'"
+                    # Update message to include collection context if relevant
+                    collection_ctx = f" in collection '{collection_name}'" if collection_name else " in default collection"
+                    no_results_message = f"No information found for the query '{query}'{collection_ctx}"
                     debug(logger, no_results_message, context_data)
-                    return [no_results_message]
+                    # Check if the first element is the standard message indicating no results
+                    # The connector now returns [] if collection doesn't exist, so this check might be less reliable
+                    # Return an empty list directly for consistency might be better
+                    if len(entries) == 1 and entries[0] == no_results_message:
+                        return entries
+                    else:
+                        # Return an empty list or a specific message if preferred
+                        return [no_results_message]
 
+                # Update message to include collection context
+                collection_ctx_title = f" in collection '{collection_name}'" if collection_name else " in default collection"
                 content = [
-                    f"Results for the query '{query}'",
+                    f"Results for the query '{query}'{collection_ctx_title}",
                 ]
 
                 for i, entry in enumerate(entries):
@@ -282,7 +312,7 @@ async def find(ctx: Context, query: str, limit: int = 10) -> List[str]:
 
                 return content
 
-            except (SearchError, EmbeddingError, ConnectionError) as e:
+            except (ConfigurationError, SearchError, EmbeddingError, ConnectionError) as e: # Added ConfigurationError
                 # Log the error and provide a user-friendly message
                 error(logger, f"Failed to search for information: {str(e)}", context_data, exc_info=e)
                 error_message = f"Failed to search for information: {e.message}"
@@ -297,6 +327,7 @@ async def find(ctx: Context, query: str, limit: int = 10) -> List[str]:
             error(logger, error_msg, context_data, exc_info=e)
             await ctx.debug(f"Error: {str(e)}")
 
-            if not isinstance(e, (SearchError, EmbeddingError, ConnectionError)):
+            # Check if it's one of our expected custom errors before wrapping
+            if not isinstance(e, (ConfigurationError, SearchError, EmbeddingError, ConnectionError)):
                 raise SearchError(error_msg, context_data, e)
             raise
