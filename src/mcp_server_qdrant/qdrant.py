@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 from qdrant_client import AsyncQdrantClient, models
-from qdrant_client import exceptions as qdrant_exceptions
+from qdrant_client.http import exceptions as qdrant_exceptions
 
 from mcp_server_qdrant.embeddings.base import EmbeddingProvider
 from mcp_server_qdrant.exceptions import ConfigurationError, ConnectionError, CollectionError, EmbeddingError, StoreError, SearchError
