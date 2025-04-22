@@ -1,0 +1,23 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+## Environment Management
+- When `uv.lock` or `pyproject.toml [tool.uv]` exists, use `uv` for package management (e.g., `uv pip install`, `uv venv`).
+- **Crucially:** If the shell context might be reset (e.g., new terminal, between separate `run_terminal_cmd` calls), **prefix each command** requiring the virtual environment with the activation command (e.g., `source .venv/bin/activate && uv pip install ...`, `source .venv/bin/activate && python -m ...`). Simple activation once per session may not be sufficient if the shell state is not persistent between tool calls.
+- Check for potential conflicts between system-installed tools (e.g., Homebrew Python/uvicorn) and virtual environment versions (`which uvicorn`, `which python`). Ensure commands execute using the intended versions from the activated `.venv`.
+
+## Debugging Execution Issues
+- For silent script/server exits:
+    1. Verify command-line arguments (e.g., `--transport sse` for web servers).
+    2. Increase log verbosity (`--log-level debug`).
+    3. Check for missing dependencies (`ModuleNotFoundError`), including transitive ones (consider explicit installation).
+    4. If logs are missing, add temporary `print()` statements early in initialization (e.g., lifespan managers) to trace execution flow.
+    5. Attempt execution via different runners (`python -m main` vs. `uvicorn app:mcp`) to check for runner-specific issues or different error reporting.
+    6. Isolate the problem: Test core components (e.g., basic FastAPI app with `uvicorn`) to confirm the environment and tools are fundamentally working.
+    7. If issues persist, consider environment corruption: Deactivate, remove (`rm -rf .venv`), recreate (`uv venv`), reactivate, reinstall dependencies.
+
+## Verification
+- Prioritize verifying complex changes (e.g., after rebasing, merging logic) with local execution and tests before documenting or pushing, if the local environment allows.
+- If local testing is blocked by persistent environment issues, clearly communicate this and adapt the verification strategy (e.g., testing in a different environment post-push).
