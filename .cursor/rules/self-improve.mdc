@@ -1,7 +1,7 @@
 ---
 description:
 globs:
-alwaysApply: false
+alwaysApply: true
 ---
 ## Environment Management
 - When `uv.lock` or `pyproject.toml [tool.uv]` exists, use `uv` for package management (e.g., `uv pip install`, `uv venv`).
@@ -21,3 +21,14 @@ alwaysApply: false
 ## Verification
 - Prioritize verifying complex changes (e.g., after rebasing, merging logic) with local execution and tests before documenting or pushing, if the local environment allows.
 - If local testing is blocked by persistent environment issues, clearly communicate this and adapt the verification strategy (e.g., testing in a different environment post-push).
+
+## Git Workflow
+- **Git Divergence:** Handle branch divergence carefully. `git rebase --abort` means remote changes were *not* integrated. Merging (e.g., `git merge origin/master` into local branch) is an alternative integration strategy. Resolve conflicts, often preferring local changes (`--ours` when merging into the checked-out branch) if `local-changes` branch holds the intended state.
+- **Git Branch Cleanup:** Consolidate work from messy/temporary branches into a clean `dev` branch via merges (e.g., `git checkout -b dev master && git merge <branch_to_merge>`) as a recovery method. Delete temporary local branches afterwards (`git branch -d <branch_name>`).
+- **Useful Git Commands:** Use `git cherry -v <upstream_branch> <local_branch>` to see unique local commits. Use `git reset --hard <remote>/<branch>` to force-match remote (use cautiously as it discards local commits). Use `git show <commit>:<path>` to view file content at a specific commit.
+
+## Cursor Integration
+- **Cursor Rule Frontmatter:** Ensure YAML frontmatter keys like `description` and `globs` have explicit empty values (`""`, `[]`) if applicable, otherwise Cursor might not parse the rule correctly and it may appear blank in the UI.
+
+## Tool Usage
+- **Tool `edit_file`:** If `edit_file` fails repeatedly, especially when modifying YAML frontmatter, consider manual edits as a reliable fallback.

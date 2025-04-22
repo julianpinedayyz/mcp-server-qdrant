@@ -1,5 +1,9 @@
 ---
 description:
 globs:
-alwaysApply: false
+alwaysApply: true
 ---
+## Local Development
+- **MCP Server Env Vars:** Running `mcp-server-qdrant` locally requires setting `QDRANT_URL` (or `QDRANT_LOCAL_PATH`), `COLLECTION_NAME`, and `EMBEDDING_MODEL`.
+- **MCP Server Local Run:** Prefer using `uvx mcp-server-qdrant --transport sse` for local execution.
+- **MCP Server Interaction:** Communication requires JSON-RPC format, not just plain JSON.
