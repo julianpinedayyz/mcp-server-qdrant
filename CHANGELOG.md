@@ -60,3 +60,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Proper handling of connection errors to Qdrant server
 - Better initialization sequence with appropriate error propagation
 - Improved error handling for embedding provider initialization
+
+- Rebased local `master` branch onto `upstream/master`, integrating upstream changes including multi-collection support in the Qdrant connector while preserving local enhancements to logging and error handling.
